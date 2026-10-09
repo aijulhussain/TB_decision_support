@@ -1,0 +1,53 @@
+# TB Risk Stratification & Programme Decision Support: default configuration.
+# Every value can be overridden with an environment variable TBDS__<SECTION>__<KEY> (see tbds/config.py).
+
+database:
+  # Production: a PostgreSQL instance on government-approved infrastructure.
+  url: postgresql+psycopg://tbds:tbds_dev_password@localhost:5432/tbds
+
+security:
+  # MUST be overridden in any real deployment (environment variable TBDS__SECURITY__JWT_SECRET).
+  jwt_secret: dev-only-change-me
+  jwt_minutes: 60
+  # Salt for pseudonymous patient keys. MUST be overridden and kept outside the analytics environment.
+  pseudonym_salt: dev-only-change-me-too
+
+data:
+  source: synthetic          # synthetic | extract  (extract = de-identified Nikshay file, see docs/DATA_ACCESS.md)
+  extract_path: null
+  as_of: "2026-10-01"        # data cut-off date used for "current" lists and label maturity
+  seed: 20261009
+  synthetic_patients: 36000
+  synthetic_start: "2024-07-01"
+
+pilot:
+  # Districts that the live review lists are enabled for during the pilot.
+  districts: ["Dibrugarh", "Kamrup Metro"]
+
+risk_model:
+  early_death_days: 60                 # outcome 1: death within this many days of treatment start
+  unfavourable_min_followup_days: 270  # outcome 2 is labelled only after this much follow-up
+  test_fraction: 0.30                  # time-ordered hold-out (latest 30% of labelled patients)
+  tier_quantiles: {high: 0.90, medium: 0.70}   # top 10% = high, next 20% = medium
+  review_capacity_per_facility: 8      # list size cap per facility per cycle (limits alert fatigue)
+  gbm_material_auc_gain: 0.02          # challenger replaces baseline only if it beats it by at least this
+
+facility_index:
+  weights:
+    early_death_rate: 0.30
+    pre_treatment_loss: 0.20
+    diagnosis_to_start_delay: 0.15
+    open_referral_rate: 0.15
+    missed_follow_up_rate: 0.10
+    supervision_gap: 0.10
+  min_cases_for_stable_rate: 30
+
+referral_gaps:
+  tested_not_notified_days: 3
+  notified_not_started_days: 7
+  referral_not_closed_days: 14
+  missed_follow_up_days: 14
+
+dedup:
+  review_probability: 0.30        # posterior match probability above which a pair enters the human review queue
+  very_likely_probability: 0.95   # above this the pair is flagged "very likely duplicate" (still never auto-merged)
