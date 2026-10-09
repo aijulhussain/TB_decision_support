@@ -5,11 +5,10 @@ from __future__ import annotations
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from tbds.config import get_settings
-from tbds.db.schema import metadata
+from tbds.db.schema import database_url, metadata
 
 config = context.config
-url = config.get_main_option("sqlalchemy.url") or get_settings().database.url
+url = config.get_main_option("sqlalchemy.url") or database_url()
 target_metadata = metadata
 
 

@@ -101,7 +101,58 @@ Served at `https://<host>/app/`, the dashboard registers a service worker so it 
 data) and can be installed as an app from the browser menu. The worker caches the page only; API calls always go to the
 server.
 
-## 8. Checklist before go-live
+## 8. Vercel (dashboard + API) with Neon Postgres
+
+On Vercel the dashboard is served as static files from `public/app/` and the API runs as one Python serverless function
+(`api/index.py`, routed by `vercel.json`). The function installs only `requirements.txt` (the API, about 76 MB). The
+pipeline needs pandas and scikit-learn, so it runs on your own computer and loads the cloud database.
+
+**1. Create the database.** At [neon.tech](https://neon.tech) create a free project (region: Singapore or Mumbai) and
+copy the **pooled** connection string (host contains `-pooler`, ends with `?sslmode=require`).
+
+**2. Choose the production secrets** (keep them in a password manager):
+
+```powershell
+python -c "import secrets; print('JWT', secrets.token_urlsafe(48)); print('SALT', secrets.token_urlsafe(32)); print('DEMO', secrets.token_urlsafe(12))"
+```
+
+**3. Load the data and build the static site, from this computer, in one PowerShell session:**
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+$env:TBDS__DATABASE__URL = "postgresql://USER:PASSWORD@ep-xxxx-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+$env:TBDS__SECURITY__PSEUDONYM_SALT = "<SALT>"
+$env:TBDS_SEED_PASSWORD = "<DEMO>"
+python -m tbds.cli run-all --drop      # synthetic data -> models -> Neon (takes a minute or two over the internet)
+python -m tbds.cli export-static       # writes public/app/ with the same salt, so snapshot and live keys match
+git add public; git commit -m "Update static dashboard"; git push
+```
+
+**4. Import the project.** At [vercel.com/new](https://vercel.com/new), import the GitHub repository. Framework preset:
+*Other*. Leave build and output settings empty (`vercel.json` sets the output directory).
+
+**5. Environment variables** (Project → Settings → Environment Variables, for Production):
+
+| Name | Value |
+|---|---|
+| `TBDS__DATABASE__URL` | the Neon pooled connection string |
+| `TBDS__SECURITY__JWT_SECRET` | `<JWT>` |
+| `TBDS__SECURITY__PSEUDONYM_SALT` | `<SALT>` |
+| `TBDS__APP__ENV` | `production` |
+| `TBDS__APP__CORS_ORIGINS` | `["https://<your-project>.vercel.app"]` |
+
+Redeploy after adding them. The API refuses to start if any is missing or still a development default, and the
+function log says which.
+
+**6. Check:** open `https://<your-project>.vercel.app/` (redirects to `/app/`), then `/health`. Sign in with a demo
+account (e.g. `dto_dibrugarh`) using the `<DEMO>` password.
+
+**Limits on Vercel.** The first request after a quiet period takes a few seconds (cold start). The sign-in lockout is
+held per function instance, so it is weaker than on a single server; signing out still revokes tokens (stored in the
+database). Re-run step 3 to refresh data; work people record (reviews, gap actions, audits) is lost on `--drop`, so
+for a running pilot use `run-all` without `--drop`.
+
+## 9. Checklist before go-live
 
 - [ ] Production variables set; the API starts with `TBDS__APP__ENV=production`
 - [ ] HTTPS with a valid certificate; HTTP redirects to HTTPS

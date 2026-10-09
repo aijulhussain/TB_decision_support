@@ -6,6 +6,7 @@
   validate           multi-seed validation of facility shrinkage (synthetic data)
   export-dashboard   rerun the pipeline and write the dashboard data file and page
   build-dashboard    rebuild dashboard/index.html from the existing data file (no pipeline run)
+  export-static      write the dashboard as a static site into public/app/ (for Vercel and other static hosts)
   refit-linkage      refit duplicate-matching weights from reviewers' confirm/reject decisions
   serve              start the API (uvicorn)
 """
@@ -81,6 +82,18 @@ def cmd_build_page(args):
     print("wrote", build_page(Path(args.data)))
 
 
+def cmd_export_static(args):
+    import shutil
+    from tbds.reports.build_page import DASH, build_page
+    out = Path(args.out) / "app"
+    out.mkdir(parents=True, exist_ok=True)
+    build_page(Path(args.data), out / "index.html")
+    for f in ("sw.js", "manifest.webmanifest", "icon.svg"):
+        shutil.copy2(DASH / f, out / f)
+    size = sum(f.stat().st_size for f in out.iterdir()) / 1e6
+    print(f"static site written to {out} ({size:.2f} MB). Commit public/ and push to redeploy.")
+
+
 def cmd_refit(args):
     from tbds.models.linkage_refit import refit_from_reviews
     print(json.dumps(refit_from_reviews(), indent=2))
@@ -102,6 +115,7 @@ def main():
     a = sub.add_parser("validate"); a.add_argument("--seeds", type=int, default=12); a.set_defaults(fn=cmd_validate)
     a = sub.add_parser("export-dashboard"); a.add_argument("--out", default=str(ROOT / "dashboard" / "dashboard_data.json")); a.set_defaults(fn=cmd_export)
     a = sub.add_parser("build-dashboard"); a.add_argument("--data", default=str(ROOT / "dashboard" / "dashboard_data.json")); a.set_defaults(fn=cmd_build_page)
+    a = sub.add_parser("export-static"); a.add_argument("--data", default=str(ROOT / "dashboard" / "dashboard_data.json")); a.add_argument("--out", default=str(ROOT / "public")); a.set_defaults(fn=cmd_export_static)
     a = sub.add_parser("refit-linkage"); a.set_defaults(fn=cmd_refit)
     a = sub.add_parser("serve"); a.add_argument("--host", default="127.0.0.1", help="use 0.0.0.0 to allow other computers on the network"); a.add_argument("--port", type=int, default=8000); a.set_defaults(fn=cmd_serve)
     args = ap.parse_args()

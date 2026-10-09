@@ -64,6 +64,15 @@ docker start tbds-db
 python -m tbds.cli serve
 ```
 
+## Deploying
+
+* **Vercel + Neon Postgres** (dashboard as static files, API as a serverless function): step by step in
+  [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#8-vercel-dashboard--api-with-neon-postgres).
+* **Own server** (uvicorn behind Caddy or nginx with HTTPS): same document, sections 1–7.
+
+Requirements are split: `requirements.txt` is the API only (what Vercel installs), `requirements-pipeline.txt` adds
+the data pipeline, and `requirements-dev.txt` adds the test tools.
+
 ## Dashboard
 
 A single self-contained page (`dashboard/index.html`) with two modes:
@@ -116,6 +125,7 @@ python -m tbds.cli <command>
 |---|---|
 | `run-all [--drop] [--no-dashboard]` | Whole pipeline: data → models → PostgreSQL → dashboard data and page |
 | `serve [--host 127.0.0.1] [--port 8000]` | Start the API and dashboard (`--host 0.0.0.0` to allow other computers on the network) |
+| `export-static [--out public]` | Write the dashboard as a static site to `public/app/` (for Vercel or any static host) |
 | `build-dashboard` | Rebuild `dashboard/index.html` from the existing data file, after editing `dashboard/src/` or `template.html` |
 | `export-dashboard` | Rerun the pipeline and rewrite the dashboard data and page, without touching the database |
 | `init-db [--drop]` | Create or upgrade the schema; `--drop` deletes everything first, including people's work |

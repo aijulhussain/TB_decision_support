@@ -2,10 +2,12 @@
 which only authorised roles can read through the API (every read is audit-logged)."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from sqlalchemy import (BigInteger, Boolean, Column, Date, DateTime, Float, Index, Integer, MetaData, String, Table, Text,
                         create_engine, func, inspect, text)
+from sqlalchemy.pool import NullPool
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 
@@ -93,8 +95,26 @@ revoked_tokens = Table(
 )
 
 
+def database_url() -> str:
+    """The database URL: TBDS__DATABASE__URL (or the config file), else DATABASE_URL / POSTGRES_URL as set by hosts such as
+    Vercel and Neon. Plain postgres:// URLs are given the psycopg driver."""
+    url = get_settings().database.url
+    if "TBDS__DATABASE__URL" not in os.environ:
+        for k in ("DATABASE_URL", "POSTGRES_URL"):
+            if os.environ.get(k):
+                url = os.environ[k]
+                break
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            url = "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 def get_engine(url: str | None = None) -> Engine:
-    return create_engine(url or get_settings().database.url, pool_pre_ping=True, future=True)
+    if os.environ.get("VERCEL"):
+        # Serverless: each instance is short-lived, so hold no idle connections (use the provider's pooled URL instead).
+        return create_engine(url or database_url(), poolclass=NullPool, future=True)
+    return create_engine(url or database_url(), pool_pre_ping=True, future=True)
 
 
 # ---------------------------------------------------------------- migrations (Alembic)

@@ -1,7 +1,7 @@
-# Development and test dependencies.
+# Development and test dependencies: everything, plus test tools.
 # Install: pip install -r requirements-dev.txt
 # Browser tests also need a browser once: python -m playwright install chromium
--r requirements.txt
+-r requirements-pipeline.txt
 httpx==0.28.1
 playwright==1.63.0
 pytest==9.1.1

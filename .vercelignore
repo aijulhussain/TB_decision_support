@@ -1,0 +1,8 @@
+# Not needed on Vercel: the pipeline runs elsewhere and loads the database; only the API and public/ are deployed.
+.venv/
+**/__pycache__/
+tests/
+model_store/
+dashboard/index.html
+dashboard/dashboard_data.json
+.github/

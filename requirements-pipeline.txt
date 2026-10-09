@@ -1,0 +1,9 @@
+# Data pipeline and models (run-all, export-static): the API runtime plus the scientific stack.
+# Install: pip install -r requirements-pipeline.txt
+-r requirements.txt
+jellyfish==1.2.1
+joblib==1.6.0
+numpy==2.5.3
+pandas==3.0.6
+scikit-learn==1.9.1
+scipy==1.18.1

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "outputDirectory": "public",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 30,
+      "excludeFiles": "{.venv/**,tests/**,dashboard/**,public/**,docs/**,model_store/**,data/**,tbds/synth/**,tbds/models/**,tbds/pipeline/**,tbds/reports/**,**/__pycache__/**}"
+    }
+  },
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/app/",
+      "permanent": false
+    },
+    {
+      "source": "/app",
+      "destination": "/app/",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(health|me|overview|tasks|docs|openapi.json|auth|patients|facilities|districts|referral-gaps|users|duplicates|death-audit|feedback|model|data-quality|trends|reports|audit)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/(auth|patients|facilities|districts|referral-gaps|users|duplicates|death-audit|feedback|model|data-quality|trends|reports|audit)/:path*",
+      "destination": "/api/index"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/app/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/app/"
+        }
+      ]
+    },
+    {
+      "source": "/app/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
+      ]
+    }
+  ]
+}

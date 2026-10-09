@@ -148,7 +148,8 @@ def production_problems() -> list[str]:
         probs.append("TBDS__SECURITY__JWT_SECRET must be set to a random value of at least 32 characters")
     if sec.pseudonym_salt == DEV_SALT:
         probs.append("TBDS__SECURITY__PSEUDONYM_SALT must be set")
-    if DEV_DB_PASSWORD in str(cfg.database.url):
+    from tbds.db.schema import database_url
+    if DEV_DB_PASSWORD in database_url():
         probs.append("TBDS__DATABASE__URL still uses the development password")
     origins = cfg.get("app", {}).get("cors_origins", ["*"])
     if "*" in origins or "null" in origins:
