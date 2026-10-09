@@ -1,7 +1,8 @@
 """Command line: python -m tbds.cli <command>
 
   run-all            generate/ingest -> models -> PostgreSQL -> dashboard JSON  (the whole pipeline)
-  init-db            create tables (--drop to recreate)
+  init-db            create or upgrade the database schema (--drop deletes everything first)
+  migrate            upgrade an existing database to the latest schema, keeping its data
   validate           multi-seed validation of facility shrinkage (synthetic data)
   export-dashboard   rerun the pipeline and write the dashboard data file and page
   build-dashboard    rebuild dashboard/index.html from the existing data file (no pipeline run)
@@ -22,9 +23,10 @@ def cmd_run_all(args):
     from tbds.pipeline.run import run_all
     R = run_all()
     eng = schema.get_engine()
-    schema.create_all(eng, drop=args.drop)
+    print("schema:", schema.migrate(eng, drop=args.drop))
     counts = load.persist(eng, R)
     print("persisted:", counts)
+    _print_logins(R)
     if not args.no_dashboard:
         from tbds.reports.dashboard_data import build
         from tbds.reports.build_page import build_page
@@ -34,10 +36,30 @@ def cmd_run_all(args):
     print(f"done in {R['elapsed']:.0f}s (pipeline) ")
 
 
+def _print_logins(R):
+    import os
+    from tbds.config import get_settings
+    pilot = get_settings().pilot.districts
+    custom = "TBDS_SEED_PASSWORD" in os.environ
+    fac = R["ds"].facilities
+    one = fac[fac.district.isin(pilot)].facility_id.iloc[0].lower() if fac.district.isin(pilot).any() else "<facility>"
+    print()
+    print("Demo sign-in accounts" + (" (password from TBDS_SEED_PASSWORD)" if custom else " (password: ChangeMe!2026)"))
+    print("  state_admin, data_manager")
+    print("  dto_<district>       e.g. " + ", ".join("dto_" + d.lower().replace(" ", "_") for d in pilot))
+    print(f"  tu_<facility>        e.g. tu_{one}   (pilot districts only)")
+    print(f"  field_<facility>     e.g. field_{one}")
+    print()
+
+
 def cmd_init_db(args):
     from tbds.db import schema
-    schema.create_all(schema.get_engine(), drop=args.drop)
-    print("tables ready")
+    print("schema at revision", schema.migrate(schema.get_engine(), drop=args.drop))
+
+
+def cmd_migrate(args):
+    from tbds.db import schema
+    print("schema at revision", schema.migrate(schema.get_engine(), drop=False))
 
 
 def cmd_validate(args):
@@ -76,6 +98,7 @@ def main():
     a = sub.add_parser("run-all"); a.add_argument("--drop", action="store_true"); a.add_argument("--no-dashboard", action="store_true")
     a.add_argument("--out", default=str(ROOT / "dashboard" / "dashboard_data.json")); a.set_defaults(fn=cmd_run_all)
     a = sub.add_parser("init-db"); a.add_argument("--drop", action="store_true"); a.set_defaults(fn=cmd_init_db)
+    a = sub.add_parser("migrate"); a.set_defaults(fn=cmd_migrate)
     a = sub.add_parser("validate"); a.add_argument("--seeds", type=int, default=12); a.set_defaults(fn=cmd_validate)
     a = sub.add_parser("export-dashboard"); a.add_argument("--out", default=str(ROOT / "dashboard" / "dashboard_data.json")); a.set_defaults(fn=cmd_export)
     a = sub.add_parser("build-dashboard"); a.add_argument("--data", default=str(ROOT / "dashboard" / "dashboard_data.json")); a.set_defaults(fn=cmd_build_page)

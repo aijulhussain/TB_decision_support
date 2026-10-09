@@ -2,8 +2,10 @@
 which only authorised roles can read through the API (every read is audit-logged)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import (BigInteger, Boolean, Column, Date, DateTime, Float, Index, Integer, MetaData, String, Table, Text,
-                        create_engine, func)
+                        create_engine, func, inspect, text)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 
@@ -66,12 +68,65 @@ review_actions = Table(
     Column("list_type", String(30)), Column("action", String(20)), Column("note", Text),
 )
 
+# ---- workflow tables. These hold people's work, so the pipeline never clears them (only `run-all --drop` does).
+# Gaps are rebuilt every run, so actions key on the stable (gap_type, record_id) pair, never on referral_gaps.id.
+gap_actions = Table(
+    "gap_actions", metadata, Column("id", BigInteger, primary_key=True, autoincrement=True),
+    Column("ts", DateTime(timezone=True), server_default=func.now(), index=True), Column("username", String(60)),
+    Column("gap_type", String(30), nullable=False), Column("record_id", String(30), nullable=False),
+    Column("patient_key", String(16)), Column("facility_id", String(20), index=True), Column("district", String(60), index=True),
+    Column("action", String(20), nullable=False),          # assigned | note | resolved | reopened
+    Column("assignee", String(60), index=True), Column("note", Text),
+    Index("ix_gap_actions_gap", "gap_type", "record_id"),
+)
+death_reviews = Table(
+    "death_reviews", metadata, Column("id", BigInteger, primary_key=True, autoincrement=True),
+    Column("ts", DateTime(timezone=True), server_default=func.now()), Column("username", String(60)),
+    Column("patient_key", String(16), nullable=False, index=True), Column("facility_id", String(20)), Column("district", String(60), index=True),
+    Column("status", String(20), nullable=False),          # in_progress | completed
+    Column("avoidable", String(10)),                        # yes | no | unclear
+    Column("contributing", JSONB), Column("summary", Text), Column("actions_agreed", Text),
+)
+revoked_tokens = Table(
+    "revoked_tokens", metadata, Column("jti", String(40), primary_key=True),
+    Column("expires_at", DateTime(timezone=True), nullable=False, index=True),
+)
+
 
 def get_engine(url: str | None = None) -> Engine:
     return create_engine(url or get_settings().database.url, pool_pre_ping=True, future=True)
 
 
-def create_all(engine: Engine, drop: bool = False) -> None:
+# ---------------------------------------------------------------- migrations (Alembic)
+MIGRATIONS = Path(__file__).resolve().parent / "migrations"
+BASELINE = "0001_baseline"     # the schema as it was before migrations were introduced
+
+
+def alembic_config(engine: Engine):
+    from alembic.config import Config
+    cfg = Config()
+    cfg.set_main_option("script_location", str(MIGRATIONS))
+    cfg.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False).replace("%", "%%"))
+    return cfg
+
+
+def migrate(engine: Engine, drop: bool = False) -> str:
+    """Bring the database to the latest schema. `drop=True` deletes everything first, including people's reviews,
+    gap actions and audit findings. A database created before migrations existed is stamped at the baseline first."""
+    from alembic import command
+    cfg = alembic_config(engine)
     if drop:
         metadata.drop_all(engine)
-    metadata.create_all(engine)
+        with engine.begin() as c:
+            c.execute(text("DROP TABLE IF EXISTS alembic_version"))
+    names = set(inspect(engine).get_table_names())
+    if "alembic_version" not in names and "users" in names:
+        command.stamp(cfg, BASELINE)
+    command.upgrade(cfg, "head")
+    with engine.connect() as c:
+        return c.execute(text("SELECT version_num FROM alembic_version")).scalar()
+
+
+def create_all(engine: Engine, drop: bool = False) -> None:
+    """Kept for callers that only need the tables to exist; equivalent to migrate()."""
+    migrate(engine, drop=drop)

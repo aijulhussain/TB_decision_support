@@ -90,7 +90,7 @@ def build(R: dict, out: Path, include_multiseed: bool = True) -> Path:
 
     # ---- gaps (pilot) ----
     gp = gaps[gaps.district.isin(pilot)].head(400)
-    gap_rows = [{"type": r.gap_type, "key": r.patient_key, "facility": r.facility_id, "district": r.district, "days": int(r.days_open), "over": int(r.over_by_days), "sev": r.severity}
+    gap_rows = [{"type": r.gap_type, "rid": str(r.record_id), "key": r.patient_key, "facility": r.facility_id, "district": r.district, "days": int(r.days_open), "over": int(r.over_by_days), "sev": r.severity, "ref": str(pd.Timestamp(r.reference_date).date())}
                 for r in gp.itertuples()]
 
     # ---- duplicates (masked, as in the API) ----
@@ -115,7 +115,7 @@ def build(R: dict, out: Path, include_multiseed: bool = True) -> Path:
                     "baseline_vs_challenger": c["baseline_vs_challenger"], "thresholds": c["tier_thresholds"], "reasons_method": c["reasons_method"],
                     "metrics": {x: pm[x] for x in ["n", "events", "auc", "auc_ci95", "average_precision", "brier", "calibration_slope", "calibration_intercept", "observed_rate",
                                                      "capture_top_5pct", "capture_top_10pct", "capture_top_20pct", "ppv_top_10pct"]},
-                    "deciles": pm["decile_calibration"], "subgroups": c["subgroup_performance"],
+                    "deciles": pm["decile_calibration"], "subgroups": c["subgroup_performance"], "monitoring": c.get("monitoring_by_month", []),
                     "odds_ratios": {a: round(b, 2) for a, b in sorted(c["odds_ratios"].items(), key=lambda kv: -kv[1])}}
 
     wide = R["trends_wide"].set_index("month")

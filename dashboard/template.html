@@ -149,6 +149,8 @@ button,select,input,textarea{font:inherit;color:inherit}
 .cols{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
 .cols-15{display:grid;gap:14px;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
 .sec{display:flex;flex-direction:column;gap:0}
+.cols.sec{display:grid}
+svg.chart{max-height:420px}
 .sec-hd{display:flex;align-items:flex-end;gap:10px;margin:6px 2px 10px}
 .sec-hd h2{font-size:14px} .sec-hd .sub{font-size:11.5px;color:var(--muted);margin-top:2px}
 .sec-hd .right{margin-left:auto;display:flex;gap:8px}
@@ -274,6 +276,7 @@ tbody tr.click{cursor:pointer}
 tbody tr.click:hover{background:var(--accent-tint)}
 tbody tr.hot{background:var(--high-bg)}
 td b{font-weight:600;color:var(--ink)}
+td .chip{white-space:nowrap}
 td:first-child>span>b{white-space:nowrap}
 td .sub{display:block;font-size:11px;color:var(--muted);margin-top:1px}
 .count{font-size:11.5px;color:var(--muted);margin:0;padding:8px 16px;border-bottom:1px solid var(--line-2)}
@@ -440,6 +443,37 @@ dialog#login h2{font-size:17px;margin-bottom:6px}
 .err{color:var(--high);font-size:12px;min-height:1.2em;margin:4px 0 10px}
 .ident{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:12px}
 
+/* workflow: toast action, timeline, checklists, task lists, demo guide, shortcuts */
+#toast{align-items:center;gap:14px}
+.toast-btn{border:0;background:none;color:var(--accent-soft);font-weight:700;cursor:pointer;padding:2px 4px;font-size:12.5px}
+.toast-btn:hover{text-decoration:underline}
+.timeline{display:grid;gap:0;border-left:2px solid var(--line);margin-left:4px}
+.tl-item{padding:6px 0 10px 14px;position:relative;font-size:12.5px}
+.tl-item::before{content:"";position:absolute;left:-6px;top:10px;width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--accent)}
+.tl-note{margin-top:4px;padding:6px 10px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:6px;color:var(--ink-2);white-space:pre-wrap}
+.checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 12px}
+.check{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.check input{margin-top:2px;accent-color:var(--accent)}
+.filters .check{color:var(--muted)}
+#drawer textarea{margin-top:2px}
+.task-list{display:grid}
+.task{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line-2);background:none;padding:11px 16px;cursor:pointer;font:inherit;color:inherit}
+.task:last-child{border-bottom:0}
+.task:hover{background:var(--surface-2)}
+.task-main{min-width:0}
+.task-main b{display:block;font-size:12.5px;font-weight:600}
+.task-main span{display:block;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task-go{font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap}
+.guide{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;background:linear-gradient(90deg,var(--accent-tint),var(--surface));border:1px solid var(--accent-line);border-radius:10px;padding:12px 14px 12px 16px}
+.guide-text{flex:1 1 320px;min-width:0}
+.guide-text b{display:block;font-size:13px;color:var(--ink)}
+.guide-text span{font-size:12px;color:var(--muted)}
+.guide .iconbtn{width:30px;height:30px}
+kbd{display:inline-block;min-width:22px;text-align:center;font:600 11px/1.6 var(--mono);padding:1px 6px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--surface-2);color:var(--ink);margin-right:4px}
+.shortcuts{grid-template-columns:110px 1fr;row-gap:10px}
+.skip{position:absolute;left:12px;top:-60px;z-index:100;background:var(--accent);color:#fff;padding:8px 14px;border-radius:6px;font-weight:600}
+.skip:focus{top:10px}
+
 /* ===================================================================== responsive */
 @media (max-width:1100px){
   .cols-15{grid-template-columns:1fr}
@@ -481,6 +515,7 @@ dialog#login h2{font-size:17px;margin-bottom:6px}
 </style>
 </head>
 <body>
+<a class="skip" href="#view">Skip to content</a>
 <div class="app">
   <aside id="side" aria-label="Main navigation">
     <div class="side-brand">

@@ -5,12 +5,23 @@ database:
   # Production: a PostgreSQL instance on government-approved infrastructure.
   url: postgresql+psycopg://tbds:tbds_dev_password@localhost:5432/tbds
 
+app:
+  # development | production. In production the API refuses to start while any development default below is still set.
+  env: development
+  # Browser origins allowed to call the API. "*" is accepted in development only; list exact origins in production,
+  # e.g. ["https://tbds.example.gov.in"].
+  cors_origins: ["*"]
+
 security:
-  # MUST be overridden in any real deployment (environment variable TBDS__SECURITY__JWT_SECRET).
+  # MUST be overridden in any real deployment (environment variable TBDS__SECURITY__JWT_SECRET, 32+ characters).
   jwt_secret: dev-only-change-me
   jwt_minutes: 60
   # Salt for pseudonymous patient keys. MUST be overridden and kept outside the analytics environment.
   pseudonym_salt: dev-only-change-me-too
+  # Sign-in lockout: this many failed attempts for one username within the window locks it for lockout_minutes.
+  login_max_failures: 5
+  login_window_minutes: 15
+  login_lockout_minutes: 15
 
 data:
   source: synthetic          # synthetic | extract  (extract = de-identified Nikshay file, see docs/DATA_ACCESS.md)

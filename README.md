@@ -20,9 +20,10 @@ and **districts** most need attention, and why.
 | Patient risk | Two transparent logistic models — death within 60 days of starting treatment, and unfavourable outcome — each flag with its top three reasons |
 | Facility priority | 0–100 supervision index from six size-adjusted (empirical-Bayes) indicators |
 | District planning | Real RoP planning strain against synthetic outcomes; next-quarter demand projection |
-| Care gaps | Rule-based: tested-not-notified, notified-not-started, referral-not-closed, missed follow-up |
-| Death audit | Timing of deaths, over-represented factors, facilities with more early deaths than expected |
-| Governance | Model cards (hold-out AUC, calibration, subgroup checks), role-based access, audit log |
+| Care gaps | Rule-based: tested-not-notified, notified-not-started, referral-not-closed, missed follow-up. Gaps are assigned to a person, worked with notes and marked resolved |
+| Death audit | Timing of deaths, over-represented factors, facilities with more early deaths than expected, and a structured audit form per death |
+| My tasks | One work list per person: gaps assigned to me, high-risk patients not yet reviewed, deaths awaiting audit |
+| Governance | Model cards (hold-out AUC, calibration, subgroups, monthly drift monitoring), reviewer-feedback report, role-based access, audit log |
 
 Pipeline results on the current synthetic data: early-death model AUC 0.71 (top 10% of scores captures 31% of
 early deaths); duplicate detection 97% precision in the "very likely" band; size adjustment cuts facility-rate
@@ -30,13 +31,13 @@ estimation error by about 80%.
 
 ## Quick start (Windows, PowerShell)
 
-Requires Python 3.12+ and Docker Desktop.
+Requires Python 3.12+ (CI uses 3.12) and Docker Desktop.
 
 ```powershell
 # 1. Python environment
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install pandas numpy scipy scikit-learn joblib jellyfish pyyaml sqlalchemy "psycopg[binary]" fastapi uvicorn pydantic bcrypt pyjwt python-multipart httpx pytest
+pip install -r requirements-dev.txt     # or requirements.txt for runtime only
 
 # 2. PostgreSQL (first time only; afterwards: docker start tbds-db)
 docker run -d --name tbds-db -e POSTGRES_USER=tbds -e POSTGRES_PASSWORD=tbds_dev_password -e POSTGRES_DB=tbds -p 5432:5432 postgres:16
@@ -73,9 +74,16 @@ A single self-contained page (`dashboard/index.html`) with two modes:
 * **Live.** *Sign in for live data* in the user menu connects to the API. Views are scoped by the server to the
   account's role, and reviews, duplicate decisions and identity reveals are saved and audit-logged.
 
-Sections: Overview, Patient risk, Facilities, Districts, Care gaps, De-duplication, Death audit, Model evidence.
-Light and dark themes, phone layout, CSV export and print are built in. Charts are hand-built SVG with no external
-libraries.
+Sections: Overview, My tasks, Patient risk, Facilities, Districts, Care gaps, De-duplication, Death audit, Model
+evidence. Light and dark themes, phone layout, CSV export and print are built in. Charts are hand-built SVG with no
+external libraries. Served from the API at `/app/`, the dashboard can be installed as an app and opens offline.
+
+**Working in the dashboard**
+
+* **Care gaps:** select a gap to assign it, add notes and mark it resolved (with Undo). Filter by status or "Assigned to me".
+* **Death audit:** district officers select a death to record status, avoidability, contributing factors and agreed actions.
+* **My tasks:** everything waiting on you; the sidebar badge shows how many.
+* **Keyboard:** `/` search, `j`/`k` or arrow keys to move through patients, `g` then `o`/`p`/`t`/`g` to jump to a section, `?` for the full list.
 
 ### Demo accounts
 
@@ -108,9 +116,10 @@ python -m tbds.cli <command>
 |---|---|
 | `run-all [--drop] [--no-dashboard]` | Whole pipeline: data → models → PostgreSQL → dashboard data and page |
 | `serve [--host 127.0.0.1] [--port 8000]` | Start the API and dashboard (`--host 0.0.0.0` to allow other computers on the network) |
-| `build-dashboard` | Rebuild `dashboard/index.html` from the existing data file, after editing `app.js` or `template.html` |
+| `build-dashboard` | Rebuild `dashboard/index.html` from the existing data file, after editing `dashboard/src/` or `template.html` |
 | `export-dashboard` | Rerun the pipeline and rewrite the dashboard data and page, without touching the database |
-| `init-db [--drop]` | Create (or recreate) the database tables |
+| `init-db [--drop]` | Create or upgrade the schema; `--drop` deletes everything first, including people's work |
+| `migrate` | Upgrade an existing database to the latest schema, keeping its data |
 | `validate [--seeds 12]` | Multi-seed validation of the facility size adjustment against known true rates |
 | `refit-linkage` | Refit duplicate-matching weights from reviewers' confirm/reject decisions |
 
@@ -129,25 +138,40 @@ $env:TBDS__PILOT__DISTRICTS = '["Dibrugarh", "Kamrup Metro", "Cachar"]'
 
 ### Before any real deployment
 
-The defaults are for local development and **must** be changed:
+The defaults are for local development and **must** be changed. With `TBDS__APP__ENV=production` the API refuses to start
+until they are (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), which also covers HTTPS, backups and scheduling):
 
 * `TBDS__SECURITY__JWT_SECRET` — a random secret of at least 32 characters (signs login tokens)
 * `TBDS__SECURITY__PSEUDONYM_SALT` — kept outside the analytics environment (derives patient keys)
 * `TBDS_SEED_PASSWORD` — replace the shared demo password, or seed real accounts instead
 * The database password in `TBDS__DATABASE__URL`
+* `TBDS__APP__CORS_ORIGINS`: the exact dashboard origin instead of `*`
 
 Set `data.source: extract` and `data.extract_path` to run on a de-identified Nikshay extract instead of synthetic
-data. Re-validate both risk models on the pilot districts' own retrospective data before any live use.
+data, following [docs/DATA_ACCESS.md](docs/DATA_ACCESS.md). Re-validate both risk models on the pilot districts' own
+retrospective data before any live use.
+
+Sign-in is locked for 15 minutes after 5 failed attempts for one username, and signing out revokes the token on the
+server.
 
 ## Tests
 
 ```powershell
-python -m pytest tests
+python -m pytest tests --ignore=tests/e2e     # unit and API tests
+python -m playwright install chromium           # once, for browser tests
+python -m pytest tests/e2e                       # browser tests
 ```
 
-28 tests cover the synthetic generator, pipeline, risk models, linkage and facility index. The API tests (role
-scoping, pilot-only lists, masking, audit logging of identity reveals and exports) are skipped unless the database
-has been loaded with `run-all`.
+* **Unit and API tests (36):** synthetic generator, pipeline, risk models, linkage, facility index, role scoping,
+  pilot-only lists, masking, identity reveal logging, gap and death-audit workflows, paging, sign-out and lockout,
+  and the production guard. API tests are skipped unless the database is loaded with `run-all`; they clean up after
+  themselves.
+* **Browser tests (9):** every role and section renders, gap assign/resolve/undo, My tasks, death audit, keyboard
+  navigation, the demo guide, phone layout, and live sign-in against a test server. On Windows they use the
+  installed Edge if Playwright's Chromium is missing.
+
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the pipeline, both test suites and the production-guard
+check against a fresh PostgreSQL on every push.
 
 ## Project layout
 
@@ -158,17 +182,19 @@ tbds/
   synth/                    synthetic patients, facilities, labs, referrals, duplicates
   pipeline/                 ingest, data quality, run_all orchestration
   models/                   risk, dedup, facility_index, referral_gaps, death_audit, trends, linkage_refit
-  db/                       SQLAlchemy schema and loader (incl. demo users)
+  db/                       SQLAlchemy schema, loader (incl. demo users) and Alembic migrations
   api/                      FastAPI app, auth and role-based access control
   reports/                  dashboard data builder and page assembler
   cli.py                    command line
 dashboard/
   template.html             page shell and styles
-  app.js                    dashboard application (no dependencies)
+  src/NN-*.js               dashboard application modules (no dependencies), joined by the build
+  sw.js, manifest.webmanifest, icon.svg   offline app files
   dashboard_data.json       generated data snapshot
   index.html                generated self-contained page
 model_store/                trained model files (joblib)
-tests/                      pytest suite
+tests/                      pytest suite; tests/e2e browser tests
+docs/                       DATA_ACCESS.md, DEPLOYMENT.md
 ```
 
 ## Troubleshooting
@@ -179,4 +205,6 @@ tests/                      pytest suite
 | Browser shows `ERR_ADDRESS_INVALID` for `http://0.0.0.0:8000` | Open http://localhost:8000/app instead; `0.0.0.0` is a listen address, not a URL. |
 | `connection timeout expired` on port 5432 | The database is not running: start Docker Desktop, then `docker start tbds-db`. |
 | Dashboard page returns 404 | Build it: `python -m tbds.cli build-dashboard` (or run `run-all`). |
+| `relation "gap_actions" does not exist` | The database predates the workflow tables: run `python -m tbds.cli migrate`. |
+| "Too many failed sign-ins" | Wait 15 minutes, or restart the API (the lockout is held in memory). |
 | Others on the network cannot connect | Start with `--host 0.0.0.0`, allow Python through Windows Firewall on Private networks, and share `http://<your-IP>:8000/app`. |

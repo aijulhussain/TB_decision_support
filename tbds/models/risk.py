@@ -199,9 +199,29 @@ def _gbm() -> HistGradientBoostingClassifier:
 
 
 def reasons_for(coefs: pd.Series, row: pd.Series, k: int = 3) -> list[dict]:
+    """Top risk-raising factors that apply to this patient. `share` is the factor's part of everything that raises this
+    patient's log-odds above baseline, so the shares say how much of *this patient's* extra risk each reason explains."""
     active = [(f, c) for f, c in coefs.items() if f in REASON_TEXT and row.get(f, 0) == 1 and c > 0.15]
     active.sort(key=lambda t: -t[1])
-    return [{"factor": REASON_TEXT[f], "odds_ratio": round(float(np.exp(c)), 2)} for f, c in active[:k]]
+    total = sum(c for _, c in active) or 1.0
+    return [{"factor": REASON_TEXT[f], "odds_ratio": round(float(np.exp(c)), 2), "share": round(float(c / total), 2)} for f, c in active[:k]]
+
+
+def monitoring_by_month(start: pd.Series, y: np.ndarray, p: np.ndarray, min_n: int = 100) -> list[dict]:
+    """Hold-out performance by month of treatment start: the drift check run every cycle. A month is flagged when
+    observed events differ from predicted by more than 25% (calibration drift) with enough patients to judge."""
+    df = pd.DataFrame({"m": pd.to_datetime(start).dt.to_period("M").astype(str), "y": y, "p": p})
+    out = []
+    for m, g in df.groupby("m"):
+        if len(g) < min_n:
+            continue
+        exp, obs = float(g.p.sum()), int(g.y.sum())
+        auc = float(roc_auc_score(g.y, g.p)) if 0 < obs < len(g) and obs >= 10 else None
+        oe = obs / exp if exp > 0 else None
+        out.append({"month": m, "n": int(len(g)), "events": obs, "expected": round(exp, 1), "observed_rate": round(obs / len(g), 4),
+                    "mean_predicted": round(float(g.p.mean()), 4), "oe": round(oe, 2) if oe is not None else None,
+                    "auc": round(auc, 3) if auc is not None else None, "flag": bool(oe is not None and obs >= 10 and abs(oe - 1) > 0.25)})
+    return out
 
 
 def train_and_evaluate(spec: ModelSpec, p: pd.DataFrame, districts: pd.DataFrame, as_of: pd.Timestamp, exclude_keys: set[str]) -> dict:
@@ -230,6 +250,7 @@ def train_and_evaluate(spec: ModelSpec, p: pd.DataFrame, districts: pd.DataFrame
         "baseline_metrics": m_lr, "challenger_metrics": m_gb, "chosen": chosen,
         "chosen_metrics": m_gb if choose_gbm else m_lr, "subgroups": sub,
         "odds_ratios": {f: float(np.exp(c)) for f, c in coefs.items()},
+        "monitoring": monitoring_by_month(cohort.loc[te, "treatment_start_date"], yte, pchosen),
         "_cohort": cohort, "_X": X, "_y": y,
     }
 
@@ -292,6 +313,7 @@ def model_card(ev: dict, final: dict, version: str, as_of: pd.Timestamp) -> dict
         "baseline_vs_challenger": {"logistic_auc": ev["baseline_metrics"]["auc"], "gbm_auc": ev["challenger_metrics"]["auc"],
                                    "required_gain": get_settings().risk_model.gbm_material_auc_gain},
         "subgroup_performance": ev["subgroups"],
+        "monitoring_by_month": ev["monitoring"],
         "odds_ratios": ev["odds_ratios"],
         "tier_thresholds": final["thresholds"],
         "known_limitations": [
@@ -300,7 +322,8 @@ def model_card(ev: dict, final: dict, version: str, as_of: pd.Timestamp) -> dict
             "Missing HIV, BMI or diabetes data lowers accuracy; missing values are shown as their own reasons.",
             "Performance must be re-validated on the pilot districts' own retrospective data before live use.",
         ],
-        "reasons_method": "Odds ratios of the transparent logistic model; top three risk-raising factors that apply to the patient.",
+        "reasons_method": "Odds ratios of the transparent logistic model; top three risk-raising factors that apply to the patient, "
+                          "each with its share of the patient's added log-odds.",
     }
 
 

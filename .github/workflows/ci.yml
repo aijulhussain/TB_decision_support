@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tbds
+          POSTGRES_PASSWORD: tbds_dev_password
+          POSTGRES_DB: tbds
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tbds"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run the pipeline (synthetic data -> models -> database -> dashboard)
+        run: python -m tbds.cli run-all --drop
+
+      - name: Unit and API tests
+        run: python -m pytest tests --ignore=tests/e2e -q
+
+      - name: Browser tests
+        run: python -m pytest tests/e2e -q
+
+      - name: Production guard refuses development defaults
+        run: |
+          python - <<'EOF'
+          import os, sys
+          os.environ["TBDS__APP__ENV"] = "production"
+          try:
+              import tbds.api.main  # noqa: F401
+          except RuntimeError as e:
+              print("refused as expected:", str(e).splitlines()[0]); sys.exit(0)
+          sys.exit("API started in production with development defaults")
+          EOF
