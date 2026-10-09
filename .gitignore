@@ -26,3 +26,6 @@ data/private/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Deployment secrets (never commit)
+.env.vercel
